@@ -1,13 +1,17 @@
 from telegram import Update
 from telegram.ext import ContextTypes
-from config import SERVICES, CLINIC_NAME, CLINIC_ADDRESS, CLINIC_PHONE
+from config import SERVICES, CLINIC_NAME, CLINIC_ADDRESS, CLINIC_PHONE, ADMIN_ID
 from database import Session, Appointment
 from keyboards import service_menu, confirmation_menu, ton_payment_menu
 from calendar import get_calendar_keyboard, get_time_slots_keyboard, get_current_month_year
+from ton_wallet import wallet_manager, initialize_wallet_manager
 from datetime import datetime, timedelta
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Initialize wallet manager
+initialize_wallet_manager()
 
 async def show_services(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show available services."""
@@ -41,7 +45,10 @@ async def show_appointments(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for apt in appointments:
         text += f"📅 {apt.date.strftime('%d.%m.%Y %H:%M')}\n"
         text += f"📝 {apt.service}\n"
-        text += f"Статус: {apt.status}\n\n"
+        text += f"Статус: {apt.status}\n"
+        if apt.payment_status != 'unpaid':
+            text += f"💳 Оплата: {apt.payment_status}\n"
+        text += "\n"
     
     await query.edit_message_text(text, reply_markup=main_menu())
 
@@ -60,6 +67,16 @@ async def show_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_ton_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show TON payment options."""
     query = update.callback_query
+    
+    # Check if wallet is initialized
+    if not wallet_manager:
+        text = "💳 Оплата TON\n\n"
+        text += "⚠️ TON кошелёк не настроен.\n\n"
+        text += "Для оплаты через TON необходимо настроить кошелёк.\n"
+        text += "Обратитесь к администратору."
+        await query.edit_message_text(text, reply_markup=main_menu())
+        return
+    
     text = "💳 Оплата TON\n\n"
     text += "Вы можете оплатить услуги криптовалютой TON.\n\n"
     text += "Преимущества:\n"
@@ -168,6 +185,7 @@ async def confirm_appointment(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         session.add(appointment)
         session.commit()
+        appointment_id = appointment.id
     
     # Notify admin
     await context.bot.send_message(
@@ -177,20 +195,124 @@ async def confirm_appointment(update: Update, context: ContextTypes.DEFAULT_TYPE
              f"📞 Тел: +7 999 123-45-67\n"
              f"📅 Дата: {selected_datetime.strftime('%d.%m.%Y %H:%M')}\n"
              f"📝 Услуга: {service['name']}\n"
-             f"💰 Стоимость: {service['price']} ₽"
+             f"💰 Стоимость: {service['price']} ₽\n"
+             f"🆔 ID записи: #{appointment_id}"
     )
     
-    await query.edit_message_text(
+    # Offer TON payment
+    payment_text = (
         "✅ Запись подтверждена!\n\n"
         f"Вы записаны на {service['name']}\n"
         f"📅 {selected_datetime.strftime('%d.%m.%Y')} в {selected_datetime.strftime('%H:%M')}\n"
         f"💰 Стоимость: {service['price']} ₽\n\n"
-        "В ближайшее время с вами свяжется администратор для подтверждения.",
-        reply_markup=main_menu()
     )
+    
+    # Add payment button if wallet is available
+    if wallet_manager:
+        payment_text += "💳 Хотите оплатить через TON сейчас?\n"
+        payment_text += "(Оплата не обязательна для записи)"
+        
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        keyboard = [
+            [InlineKeyboardButton("💸 Оплатить TON сейчас", callback_data=f'pay_now_{appointment_id}')],
+            [InlineKeyboardButton("⏭️ Оплатить позже", callback_data='skip_payment')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+    else:
+        payment_text += "\nВ ближайшее время с вами свяжется администратор для подтверждения."
+        reply_markup = main_menu()
+    
+    await query.edit_message_text(payment_text, reply_markup=reply_markup)
     
     # Clear user data
     context.user_data.clear()
+
+async def handle_payment_now(update: Update, context: ContextTypes.DEFAULT_TYPE, appointment_id: int):
+    """Handle immediate TON payment."""
+    query = update.callback_query
+    
+    if not wallet_manager:
+        await query.answer("TON кошелёк не настроен")
+        return
+    
+    # Get appointment details
+    with Session() as session:
+        appointment = session.query(Appointment).filter_by(id=appointment_id).first()
+        if not appointment:
+            await query.answer("Запись не найдена")
+            return
+    
+    # Calculate TON amount (example: 1 TON = 100 ₽)
+    ton_rate = 100  # Placeholder rate
+    ton_amount = appointment.price / ton_rate
+    
+    # Create invoice
+    invoice = await wallet_manager.create_invoice(
+        amount=ton_amount,
+        description=f"Оплата: {appointment.service} ({appointment.date.strftime('%d.%m.%Y')})"
+    )
+    
+    if "error" in invoice:
+        await query.edit_message_text(
+            f"❌ Ошибка при создании invoice: {invoice['error']}\n\n"
+            "Попробуйте позже или свяжитесь с администратором.",
+            reply_markup=main_menu()
+        )
+        return
+    
+    # Show payment instructions
+    payment_text = (
+        f"💸 Оплата TON\n\n"
+        f"📝 Услуга: {appointment.service}\n"
+        f"💰 Сумма: {appointment.price} ₽\n"
+        f"🪙 TON: {ton_amount:.4f}\n\n"
+        f"🔗 Ссылка для оплаты:\n"
+        f"`{invoice['payment_link']}`\n\n"
+        "Отсканируйте QR-код или перейдите по ссылке для оплаты.\n\n"
+        "После оплаты нажмите 'Проверить платёж'"
+    )
+    
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    keyboard = [
+        [InlineKeyboardButton("✅ Проверить платёж", callback_data=f'check_payment_{appointment_id}')],
+        [InlineKeyboardButton("❌ Отмена", callback_data='cancel_payment')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(payment_text, reply_markup=reply_markup, parse_mode='Markdown')
+
+async def handle_check_payment(update: Update, context: ContextTypes.DEFAULT_TYPE, appointment_id: int):
+    """Check payment status."""
+    query = update.callback_query
+    
+    if not wallet_manager:
+        await query.answer("TON кошелёк не настроен")
+        return
+    
+    # Check payment status
+    status = await wallet_manager.check_payment(f"inv_{appointment_id}")
+    
+    if status.get('status') == 'paid':
+        # Update appointment payment status
+        with Session() as session:
+            appointment = session.query(Appointment).filter_by(id=appointment_id).first()
+            if appointment:
+                appointment.payment_status = 'paid'
+                appointment.payment_tx_hash = status.get('tx_hash')
+                session.commit()
+        
+        await query.edit_message_text(
+            "✅ Платёж подтверждён!\n\n"
+            "Ваша запись полностью оплачена.\n"
+            "Ждём вас в клинике!",
+            reply_markup=main_menu()
+        )
+    else:
+        await query.edit_message_text(
+            "⏳ Платёж ещё не поступив.\n\n"
+            "Попробуйте проверить позже или свяжитесь с администратором.",
+            reply_markup=main_menu()
+        )
 
 async def cancel_appointment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel appointment."""
@@ -203,12 +325,50 @@ async def cancel_appointment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
 
 async def pay_with_ton(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle TON payment."""
+    """Handle TON payment from main menu."""
     query = update.callback_query
-    await query.answer("Функция оплаты TON в разработке")
-    await query.edit_message_text(
-        "💸 Оплата TON\n\n"
-        "Функция оплаты криптовалютой TON находится в разработке.\n\n"
-        "Скоро вы сможете оплачивать услуги напрямую через бота!",
-        reply_markup=main_menu()
-    )
+    
+    if not wallet_manager:
+        await query.edit_message_text(
+            "⚠️ TON кошелёк не настроен.\n\n"
+            "Для оплаты через TON необходимо настроить кошелёк.\n"
+            "Обратитесь к администратору.",
+            reply_markup=main_menu()
+        )
+        return
+    
+    # Show user's unpaid appointments
+    user_id = query.from_user.id
+    with Session() as session:
+        unpaid_appointments = session.query(Appointment).filter_by(
+            patient_id=user_id, 
+            payment_status='unpaid'
+        ).all()
+    
+    if not unpaid_appointments:
+        await query.edit_message_text(
+            "💳 Оплата TON\n\n"
+            "У вас нет неоплаченных записей.\n\n"
+            "Запишитесь на приём и оплатите его через TON!",
+            reply_markup=main_menu()
+        )
+        return
+    
+    # Show unpaid appointments
+    text = "💳 Оплата TON\n\n"
+    text += "Выберите запись для оплаты:\n\n"
+    
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    keyboard = []
+    
+    for apt in unpaid_appointments:
+        text += f"📝 {apt.service} — {apt.price} ₽\n"
+        text += f"📅 {apt.date.strftime('%d.%m.%Y %H:%M')}\n\n"
+        keyboard.append([InlineKeyboardButton(
+            f"Оплатить {apt.service} ({apt.price} ₽)",
+            callback_data=f'pay_now_{apt.id}'
+        )])
+    
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data='back_to_main')])
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
