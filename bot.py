@@ -6,6 +6,7 @@ from database import Session, Appointment, Patient
 from keyboards import main_menu
 import handlers
 from calendar import get_current_month_year
+from reminders import initialize_reminder_system
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -107,6 +108,10 @@ def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CallbackQueryHandler(handle_callback))
+    
+    # Initialize reminder system
+    initialize_reminder_system(app.bot)
+    
     logger.info('Bot started')
     app.run_polling()
 
