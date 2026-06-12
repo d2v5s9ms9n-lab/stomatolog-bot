@@ -5,6 +5,7 @@ from database import Session, Appointment
 from keyboards import service_menu, confirmation_menu, ton_payment_menu
 from calendar import get_calendar_keyboard, get_time_slots_keyboard, get_current_month_year
 from ton_wallet import wallet_manager, initialize_wallet_manager
+from reminders import reminder_system, send_admin_notification
 from datetime import datetime, timedelta
 import logging
 
@@ -68,7 +69,6 @@ async def show_ton_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show TON payment options."""
     query = update.callback_query
     
-    # Check if wallet is initialized
     if not wallet_manager:
         text = "💳 Оплата TON\n\n"
         text += "⚠️ TON кошелёк не настроен.\n\n"
@@ -186,6 +186,10 @@ async def confirm_appointment(update: Update, context: ContextTypes.DEFAULT_TYPE
         session.add(appointment)
         session.commit()
         appointment_id = appointment.id
+    
+    # Schedule reminders
+    if reminder_system:
+        reminder_system.schedule_all_reminders(appointment_id, selected_datetime)
     
     # Notify admin
     await context.bot.send_message(
