@@ -55,6 +55,29 @@ async def handle_callback(update: Update, context):
         service_key = data.split('_')[1]
         await handlers.select_service(update, context, service_key)
     
+    # Payment handlers
+    elif data.startswith('pay_now_'):
+        appointment_id = int(data.split('_')[2])
+        await handlers.handle_payment_now(update, context, appointment_id)
+    
+    elif data.startswith('check_payment_'):
+        appointment_id = int(data.split('_')[2])
+        await handlers.handle_check_payment(update, context, appointment_id)
+    
+    elif data == 'skip_payment':
+        await query.edit_message_text(
+            "✅ Запись подтверждена!\n\n"
+            "В ближайшее время с вами свяжется администратор для подтверждения.",
+            reply_markup=main_menu()
+        )
+    
+    elif data == 'cancel_payment':
+        await query.edit_message_text(
+            "Платёж отменён.\n\n"
+            "Вы можете оплатить запись позже через главное меню.",
+            reply_markup=main_menu()
+        )
+    
     # Navigation buttons
     elif data == 'book':
         await handlers.show_services(update, context)
