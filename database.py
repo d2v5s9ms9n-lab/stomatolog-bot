@@ -10,6 +10,7 @@ def get_connection():
 def init_db():
     conn = get_connection()
     cursor = conn.cursor()
+    
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
@@ -19,6 +20,7 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS appointments (
             id SERIAL PRIMARY KEY,
@@ -28,9 +30,12 @@ def init_db():
             appointment_date DATE,
             appointment_time TIME,
             status VARCHAR(50) DEFAULT 'pending',
+            notified_24h BOOLEAN DEFAULT FALSE,
+            notified_1h BOOLEAN DEFAULT FALSE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    
     conn.commit()
     cursor.close()
     conn.close()
@@ -39,8 +44,10 @@ def init_db():
 def get_or_create_user(telegram_id, full_name=None):
     conn = get_connection()
     cursor = conn.cursor()
+    
     cursor.execute("SELECT id FROM users WHERE telegram_id = %s", (telegram_id,))
     result = cursor.fetchone()
+    
     if result:
         user_id = result[0]
     else:
@@ -49,6 +56,7 @@ def get_or_create_user(telegram_id, full_name=None):
             (telegram_id, full_name)
         )
         user_id = cursor.fetchone()[0]
+    
     conn.commit()
     cursor.close()
     conn.close()
@@ -57,10 +65,13 @@ def get_or_create_user(telegram_id, full_name=None):
 def create_appointment(user_id, doctor_name, service_type, appointment_date, appointment_time):
     conn = get_connection()
     cursor = conn.cursor()
+    
     cursor.execute("""
-        INSERT INTO appointments (user_id, doctor_name, service_type, appointment_date, appointment_time)
+        INSERT INTO appointments 
+        (user_id, doctor_name, service_type, appointment_date, appointment_time)
         VALUES (%s, %s, %s, %s, %s) RETURNING id
     """, (user_id, doctor_name, service_type, appointment_date, appointment_time))
+    
     appointment_id = cursor.fetchone()[0]
     conn.commit()
     cursor.close()
