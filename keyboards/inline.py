@@ -16,9 +16,7 @@ def services_keyboard():
         ("🦷 Удаление зуба", "service_extraction", "Удаление зубов мудрости и других"),
         ("🦷 Чистка зубов", "service_cleaning", "Профессиональная чистка и отбеливание"),
         ("🦷 Протезирование", "service_prosthesis", "Установка коронок, мостов, протезов"),
-        ("🦷 Имплантация", "service_implantation", "Установка имплантов"),
-        ("🦷 Лечение дёсен", "service_gums", "Лечение пародонтита и гингивита"),
-        ("🦷 Детская стоматология", "service_children", "Лечение зубов у детей")
+        ("🦷 Имплантация", "service_implantation", "Установка имплантов")
     ]
     
     keyboard = []
@@ -31,8 +29,7 @@ def doctors_keyboard():
     doctors = [
         ("👨‍⚕️ Иванов И.И. - Терапевт", "doctor_ivanov"),
         ("👩‍⚕️ Петрова А.А. - Хирург", "doctor_petrova"),
-        ("👨‍⚕️ Сидоров В.В. - Ортопед", "doctor_sidorov"),
-        ("👩‍⚕️ Козлова Е.М. - Детский стоматолог", "doctor_kozlova")
+        ("👨‍⚕️ Сидоров В.В. - Ортопед", "doctor_sidorov")
     ]
     keyboard = [[InlineKeyboardButton(name, callback_data=callback)] for name, callback in doctors]
     return InlineKeyboardMarkup(keyboard)

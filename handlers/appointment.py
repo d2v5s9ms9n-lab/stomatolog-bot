@@ -13,9 +13,7 @@ SERVICE_DESCRIPTIONS = {
     "extraction": "Удаление зуба",
     "cleaning": "Чистка зубов",
     "prosthesis": "Протезирование",
-    "implantation": "Имплантация",
-    "gums": "Лечение дёсен",
-    "children": "Детская стоматология"
+    "implantation": "Имплантация"
 }
 
 async def book_appointment(update: Update, context: ContextTypes.DEFAULT_TYPE):
