@@ -1,75 +1,32 @@
-# Stomatolog Bot
+# 🦷 Dental Bot
 
-Telegram bot for dental appointment booking with TON payments integration.
+Telegram bot for dental appointments booking.
 
 ## Features
+- Book appointments with doctors
+- Select service, doctor, date and time
+- View your appointments
+- Simple and user-friendly interface
 
-- 📅 Appointment booking system
-- 💰 TON cryptocurrency payments
-- 🔔 Automated reminders
-- 📊 Admin dashboard
-- 📱 Telegram integration
+## Setup
 
-## Getting Started
-
-### Prerequisites
-
-- Python 3.9+
-- Telegram Bot Token
-- TON wallet
-
-### Installation
-
+1. Install dependencies:
 ```bash
-# Clone the repository
-git clone https://github.com/d2v5s9ms9n-lab/stomatolog-bot.git
-cd stomatolog-bot
-
-# Install dependencies
 pip install -r requirements.txt
+```
 
-# Set up environment variables
-cp .env.example .env
-# Edit .env with your tokens
+2. Create `.env` file:
+```env
+BOT_TOKEN=your_bot_token
+DATABASE_URL=postgresql://user:password@localhost:5432/dental_bot
+ADMIN_IDS=123456789
+```
 
-# Run the bot
+3. Run the bot:
+```bash
 python bot.py
 ```
 
-## Configuration
-
-Create a `.env` file with:
-
-```env
-BOT_TOKEN=your_telegram_bot_token
-TON_WALLET_ADDRESS=your_ton_wallet_address
-ADMIN_ID=your_telegram_id
-```
-
-## Usage
-
-1. Start the bot: `/start`
-2. Choose a service
-3. Select date and time
-4. Confirm appointment
-5. Pay with TON (optional)
-
-## Project Structure
-
-```
-├── bot.py              # Main bot file
-├── database.py         # Database operations
-├── handlers.py         # Message handlers
-├── keyboards.py        # Inline keyboards
-├── config.py           # Configuration
-├── requirements.txt    # Dependencies
-└── .env.example        # Environment template
-```
-
-## License
-
-MIT License - see LICENSE file for details
-
-## Support
-
-For issues and questions, please open an issue on GitHub.
+## Commands
+- `/start` - Start the bot
+- `/book` - Book an appointment

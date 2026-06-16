@@ -1,57 +1,68 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Float
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from datetime import datetime
+import psycopg2
 from config import DATABASE_URL
+import logging
 
-Base = declarative_base()
+logger = logging.getLogger(__name__)
 
-class Patient(Base):
-    __tablename__ = 'patients'
-    id = Column(Integer, primary_key=True)
-    telegram_id = Column(Integer, unique=True)
-    first_name = Column(String)
-    last_name = Column(String)
-    phone = Column(String)
-    created_at = Column(DateTime, default=datetime.now)
+def get_connection():
+    return psycopg2.connect(DATABASE_URL)
 
-class Appointment(Base):
-    __tablename__ = 'appointments'
-    id = Column(Integer, primary_key=True)
-    patient_id = Column(Integer)
-    patient_name = Column(String)
-    patient_phone = Column(String)
-    date = Column(DateTime)
-    service = Column(String)
-    price = Column(Float)
-    status = Column(String, default='pending')
-    payment_status = Column(String, default='unpaid')
-    payment_tx_hash = Column(String)
-    created_at = Column(DateTime, default=datetime.now)
+def init_db():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            telegram_id BIGINT UNIQUE NOT NULL,
+            full_name VARCHAR(255),
+            phone VARCHAR(20),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS appointments (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id),
+            doctor_name VARCHAR(255),
+            service_type VARCHAR(255),
+            appointment_date DATE,
+            appointment_time TIME,
+            status VARCHAR(50) DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    cursor.close()
+    conn.close()
+    logger.info("База данных инициализирована")
 
-class Service(Base):
-    __tablename__ = 'services'
-    id = Column(Integer, primary_key=True)
-    name = Column(String)
-    description = Column(String)
-    price = Column(Float)
-    duration = Column(Integer)
-    is_active = Column(Boolean, default=True)
+def get_or_create_user(telegram_id, full_name=None):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM users WHERE telegram_id = %s", (telegram_id,))
+    result = cursor.fetchone()
+    if result:
+        user_id = result[0]
+    else:
+        cursor.execute(
+            "INSERT INTO users (telegram_id, full_name) VALUES (%s, %s) RETURNING id",
+            (telegram_id, full_name)
+        )
+        user_id = cursor.fetchone()[0]
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return user_id
 
-engine = create_engine(DATABASE_URL)
-Session = sessionmaker(bind=engine)
-Base.metadata.create_all(engine)
-
-def init_services():
-    with Session() as session:
-        if not session.query(Service).first():
-            services = [
-                Service(name='Консультация', description='Первичный осмотр и консультация', price=1000, duration=30),
-                Service(name='Лечение кариеса', description='Лечение кариеса любой сложности', price=3000, duration=60),
-                Service(name='Профессиональная чистка', description='Удаление зубного камня и налета', price=2500, duration=45),
-                Service(name='Отбеливание', description='Профессиональное отбеливание зубов', price=5000, duration=90),
-            ]
-            session.add_all(services)
-            session.commit()
-
-init_services()
+def create_appointment(user_id, doctor_name, service_type, appointment_date, appointment_time):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO appointments (user_id, doctor_name, service_type, appointment_date, appointment_time)
+        VALUES (%s, %s, %s, %s, %s) RETURNING id
+    """, (user_id, doctor_name, service_type, appointment_date, appointment_time))
+    appointment_id = cursor.fetchone()[0]
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return appointment_id
