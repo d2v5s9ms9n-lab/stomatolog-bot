@@ -1,4 +1,4 @@
-name: Deploy Dental Bot
+name: Run Tests
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
     
     steps:
@@ -24,14 +24,12 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
+    - name: Run linting
+      run: |
+        echo "Running linting..."
+        # Add linting commands here
+    
     - name: Run tests
       run: |
         echo "Running tests..."
-        # Add your test commands here
-    
-    - name: Deploy to server
-      if: github.ref == 'refs/heads/main'
-      run: |
-        echo "Deploying to production server..."
-        # Add your deployment commands here
-        # Example: ssh user@server 'cd /path/to/bot && git pull && pip install -r requirements.txt && systemctl restart dental-bot'
+        # Add test commands here
